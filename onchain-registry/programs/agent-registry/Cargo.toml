@@ -1,0 +1,21 @@
+[package]
+name = "agent-registry"
+version = "0.1.0"
+description = "On-chain AI Agent Registry for Layer2Agents marketplace on Solana"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/layer2agents/onchain-registry"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "agent_registry"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+
+[dependencies]
+anchor-lang = "0.32.1"

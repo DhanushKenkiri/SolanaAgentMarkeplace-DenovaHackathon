@@ -1,0 +1,442 @@
+use anchor_lang::prelude::*;
+
+declare_id!("FJ4JML2n58cV1FgVFCqqW56YKu2wyK8DJF3jxGRhW1fi");
+
+#[program]
+pub mod agent_registry {
+    use super::*;
+
+    /// Initialize the registry state
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        let registry = &mut ctx.accounts.registry;
+        registry.authority = ctx.accounts.authority.key();
+        registry.agent_count = 0;
+        registry.bump = ctx.bumps.registry;
+        msg!("Agent Registry initialized!");
+        Ok(())
+    }
+
+    /// Register a new agent on-chain
+    pub fn register_agent(
+        ctx: Context<RegisterAgent>,
+        agent_id: String,
+        name: String,
+        description: String,
+        api_url: String,
+        tags: Vec<String>,
+        price_per_task: u64,
+        accepted_payment_tokens: Vec<Pubkey>,
+        metadata_uri: String,
+    ) -> Result<()> {
+        require!(agent_id.len() <= 64, RegistryError::AgentIdTooLong);
+        require!(name.len() <= 128, RegistryError::NameTooLong);
+        require!(description.len() <= 512, RegistryError::DescriptionTooLong);
+        require!(api_url.len() <= 256, RegistryError::ApiUrlTooLong);
+        require!(tags.len() <= 10, RegistryError::TooManyTags);
+        require!(metadata_uri.len() <= 256, RegistryError::MetadataUriTooLong);
+
+        // Get keys before mutable borrow
+        let agent_key = ctx.accounts.agent.key();
+        let owner_key = ctx.accounts.owner.key();
+        let clock = Clock::get()?;
+
+        let agent = &mut ctx.accounts.agent;
+        let registry = &mut ctx.accounts.registry;
+
+        agent.owner = owner_key;
+        agent.agent_id = agent_id.clone();
+        agent.name = name.clone();
+        agent.description = description;
+        agent.api_url = api_url.clone();
+        agent.tags = tags;
+        agent.price_per_task = price_per_task;
+        agent.accepted_payment_tokens = accepted_payment_tokens;
+        agent.metadata_uri = metadata_uri;
+        agent.status = AgentStatus::Active;
+        agent.created_at = clock.unix_timestamp;
+        agent.updated_at = clock.unix_timestamp;
+        agent.total_tasks_completed = 0;
+        agent.total_earnings = 0;
+        agent.rating_sum = 0;
+        agent.rating_count = 0;
+        agent.bump = ctx.bumps.agent;
+
+        registry.agent_count += 1;
+
+        emit!(AgentRegistered {
+            agent: agent_key,
+            owner: owner_key,
+            agent_id,
+            name,
+            api_url,
+            timestamp: clock.unix_timestamp,
+        });
+
+        msg!("Agent '{}' registered successfully!", agent.name);
+        Ok(())
+    }
+
+    /// Update an existing agent
+    pub fn update_agent(
+        ctx: Context<UpdateAgent>,
+        name: Option<String>,
+        description: Option<String>,
+        api_url: Option<String>,
+        tags: Option<Vec<String>>,
+        price_per_task: Option<u64>,
+        accepted_payment_tokens: Option<Vec<Pubkey>>,
+        metadata_uri: Option<String>,
+    ) -> Result<()> {
+        // Get keys before mutable borrow
+        let agent_key = ctx.accounts.agent.key();
+        let owner_key = ctx.accounts.owner.key();
+        let clock = Clock::get()?;
+
+        let agent = &mut ctx.accounts.agent;
+
+        if let Some(n) = name {
+            require!(n.len() <= 128, RegistryError::NameTooLong);
+            agent.name = n;
+        }
+        if let Some(d) = description {
+            require!(d.len() <= 512, RegistryError::DescriptionTooLong);
+            agent.description = d;
+        }
+        if let Some(u) = api_url {
+            require!(u.len() <= 256, RegistryError::ApiUrlTooLong);
+            agent.api_url = u;
+        }
+        if let Some(t) = tags {
+            require!(t.len() <= 10, RegistryError::TooManyTags);
+            agent.tags = t;
+        }
+        if let Some(p) = price_per_task {
+            agent.price_per_task = p;
+        }
+        if let Some(tokens) = accepted_payment_tokens {
+            agent.accepted_payment_tokens = tokens;
+        }
+        if let Some(uri) = metadata_uri {
+            require!(uri.len() <= 256, RegistryError::MetadataUriTooLong);
+            agent.metadata_uri = uri;
+        }
+
+        agent.updated_at = clock.unix_timestamp;
+
+        emit!(AgentUpdated {
+            agent: agent_key,
+            owner: owner_key,
+            timestamp: clock.unix_timestamp,
+        });
+
+        msg!("Agent '{}' updated successfully!", agent.name);
+        Ok(())
+    }
+
+    /// Set agent status (active, paused, deprecated)
+    pub fn set_agent_status(ctx: Context<UpdateAgent>, status: AgentStatus) -> Result<()> {
+        let agent = &mut ctx.accounts.agent;
+        let clock = Clock::get()?;
+
+        agent.status = status.clone();
+        agent.updated_at = clock.unix_timestamp;
+
+        emit!(AgentStatusChanged {
+            agent: ctx.accounts.agent.key(),
+            owner: ctx.accounts.owner.key(),
+            status,
+            timestamp: clock.unix_timestamp,
+        });
+
+        msg!("Agent status updated!");
+        Ok(())
+    }
+
+    /// Deregister (close) an agent account
+    pub fn deregister_agent(ctx: Context<DeregisterAgent>) -> Result<()> {
+        let registry = &mut ctx.accounts.registry;
+        let clock = Clock::get()?;
+
+        registry.agent_count = registry.agent_count.saturating_sub(1);
+
+        emit!(AgentDeregistered {
+            agent: ctx.accounts.agent.key(),
+            owner: ctx.accounts.owner.key(),
+            agent_id: ctx.accounts.agent.agent_id.clone(),
+            timestamp: clock.unix_timestamp,
+        });
+
+        msg!("Agent deregistered successfully!");
+        Ok(())
+    }
+
+    /// Record a completed task for an agent (called by authorized services)
+    pub fn record_task_completion(
+        ctx: Context<RecordTask>,
+        earnings: u64,
+        rating: Option<u8>,
+    ) -> Result<()> {
+        // Get key before mutable borrow
+        let agent_key = ctx.accounts.agent.key();
+        let clock = Clock::get()?;
+
+        let agent = &mut ctx.accounts.agent;
+
+        agent.total_tasks_completed += 1;
+        agent.total_earnings += earnings;
+
+        if let Some(r) = rating {
+            require!(r <= 5, RegistryError::InvalidRating);
+            agent.rating_sum += r as u64;
+            agent.rating_count += 1;
+        }
+
+        let total_tasks = agent.total_tasks_completed;
+        agent.updated_at = clock.unix_timestamp;
+
+        emit!(TaskCompleted {
+            agent: agent_key,
+            earnings,
+            rating,
+            total_tasks,
+            timestamp: clock.unix_timestamp,
+        });
+
+        msg!("Task recorded for agent!");
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Account Contexts
+// ============================================================================
+
+#[derive(Accounts)]
+pub struct Initialize<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Registry::INIT_SPACE,
+        seeds = [b"registry"],
+        bump
+    )]
+    pub registry: Account<'info, Registry>,
+    
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(agent_id: String)]
+pub struct RegisterAgent<'info> {
+    #[account(
+        mut,
+        seeds = [b"registry"],
+        bump = registry.bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    #[account(
+        init,
+        payer = owner,
+        space = 8 + Agent::INIT_SPACE,
+        seeds = [b"agent", agent_id.as_bytes()],
+        bump
+    )]
+    pub agent: Account<'info, Agent>,
+    
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateAgent<'info> {
+    #[account(
+        mut,
+        has_one = owner,
+        seeds = [b"agent", agent.agent_id.as_bytes()],
+        bump = agent.bump
+    )]
+    pub agent: Account<'info, Agent>,
+    
+    pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct DeregisterAgent<'info> {
+    #[account(
+        mut,
+        seeds = [b"registry"],
+        bump = registry.bump
+    )]
+    pub registry: Account<'info, Registry>,
+
+    #[account(
+        mut,
+        has_one = owner,
+        close = owner,
+        seeds = [b"agent", agent.agent_id.as_bytes()],
+        bump = agent.bump
+    )]
+    pub agent: Account<'info, Agent>,
+    
+    #[account(mut)]
+    pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct RecordTask<'info> {
+    #[account(
+        mut,
+        seeds = [b"agent", agent.agent_id.as_bytes()],
+        bump = agent.bump
+    )]
+    pub agent: Account<'info, Agent>,
+    
+    /// The authority that can record tasks (could be the agent owner or a designated service)
+    pub authority: Signer<'info>,
+}
+
+// ============================================================================
+// State Accounts
+// ============================================================================
+
+#[account]
+#[derive(InitSpace)]
+pub struct Registry {
+    /// The authority who initialized the registry
+    pub authority: Pubkey,
+    /// Total number of registered agents
+    pub agent_count: u64,
+    /// PDA bump
+    pub bump: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct Agent {
+    /// Owner wallet that registered this agent
+    pub owner: Pubkey,
+    /// Unique identifier for the agent
+    #[max_len(64)]
+    pub agent_id: String,
+    /// Human-readable name
+    #[max_len(128)]
+    pub name: String,
+    /// Description of what the agent does
+    #[max_len(512)]
+    pub description: String,
+    /// API endpoint URL (MIP-003 compatible)
+    #[max_len(256)]
+    pub api_url: String,
+    /// Tags/categories for discovery
+    #[max_len(10, 32)]
+    pub tags: Vec<String>,
+    /// Price per task in lamports (or smallest token unit)
+    pub price_per_task: u64,
+    /// Accepted payment token mints
+    #[max_len(5)]
+    pub accepted_payment_tokens: Vec<Pubkey>,
+    /// URI to off-chain metadata (IPFS, Arweave, etc.)
+    #[max_len(256)]
+    pub metadata_uri: String,
+    /// Current status
+    pub status: AgentStatus,
+    /// Unix timestamp of registration
+    pub created_at: i64,
+    /// Unix timestamp of last update
+    pub updated_at: i64,
+    /// Total tasks completed
+    pub total_tasks_completed: u64,
+    /// Total earnings in lamports
+    pub total_earnings: u64,
+    /// Sum of all ratings (for calculating average)
+    pub rating_sum: u64,
+    /// Number of ratings received
+    pub rating_count: u64,
+    /// PDA bump
+    pub bump: u8,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, InitSpace)]
+pub enum AgentStatus {
+    Active,
+    Paused,
+    Deprecated,
+}
+
+// ============================================================================
+// Events
+// ============================================================================
+
+#[event]
+pub struct AgentRegistered {
+    pub agent: Pubkey,
+    pub owner: Pubkey,
+    pub agent_id: String,
+    pub name: String,
+    pub api_url: String,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct AgentUpdated {
+    pub agent: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct AgentStatusChanged {
+    pub agent: Pubkey,
+    pub owner: Pubkey,
+    pub status: AgentStatus,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct AgentDeregistered {
+    pub agent: Pubkey,
+    pub owner: Pubkey,
+    pub agent_id: String,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct TaskCompleted {
+    pub agent: Pubkey,
+    pub earnings: u64,
+    pub rating: Option<u8>,
+    pub total_tasks: u64,
+    pub timestamp: i64,
+}
+
+// ============================================================================
+// Errors
+// ============================================================================
+
+#[error_code]
+pub enum RegistryError {
+    #[msg("Agent ID exceeds maximum length of 64 characters")]
+    AgentIdTooLong,
+    #[msg("Name exceeds maximum length of 128 characters")]
+    NameTooLong,
+    #[msg("Description exceeds maximum length of 512 characters")]
+    DescriptionTooLong,
+    #[msg("API URL exceeds maximum length of 256 characters")]
+    ApiUrlTooLong,
+    #[msg("Too many tags (maximum 10)")]
+    TooManyTags,
+    #[msg("Metadata URI exceeds maximum length of 256 characters")]
+    MetadataUriTooLong,
+    #[msg("Rating must be between 0 and 5")]
+    InvalidRating,
+    #[msg("Agent is not active")]
+    AgentNotActive,
+    #[msg("Unauthorized")]
+    Unauthorized,
+}

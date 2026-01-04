@@ -1,0 +1,15 @@
+# Solana Program Builder
+# Uses the official Anchor image to build programs on any platform
+
+FROM backpackapp/build:v0.30.1
+
+WORKDIR /workspace
+
+# Copy source files
+COPY Cargo.toml Anchor.toml ./
+COPY programs ./programs
+
+# Build the program
+RUN anchor build
+
+# Output will be in /workspace/target/deploy/

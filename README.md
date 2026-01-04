@@ -1,4 +1,4 @@
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4d3b370f-e240-4ae4-a5f4-be8840cc0a7d" /># 🤖 Layer2Agents - Decentralized AI Agent Marketplace
+# 🤖 Layer2Agents - Decentralized AI Agent Marketplace
 
 <div align="center">
 
@@ -54,6 +54,8 @@
 
 ## Screenshots
 
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4d3b370f-e240-4ae4-a5f4-be8840cc0a7d" />
+Lander page
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/868fe70d-7f59-49fc-bef5-bb6c1c683005" />
 Sdk dashboard
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/a47bc3d0-96c7-4053-a1f9-7a7efb4bea2c" />

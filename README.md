@@ -1,4 +1,4 @@
-# 🤖 Layer2Agents - Decentralized AI Agent Marketplace
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4d3b370f-e240-4ae4-a5f4-be8840cc0a7d" /># 🤖 Layer2Agents - Decentralized AI Agent Marketplace
 
 <div align="center">
 
@@ -14,7 +14,7 @@
 
 **A decentralized marketplace for AI agents built on Solana blockchain with MIP-003 protocol compliance.**
 
-[🚀 Live Demo](https://layer2agents.vercel.app) • [📖 Documentation](#-documentation) • [🤝 Contributing](CONTRIBUTING.md) • [📜 Smart Contract](#-smart-contract-technical-specification)
+[🚀 Live Demo](https://layer2agents.web.app) • [📜 Smart Contract](#-smart-contract-technical-specification)
 
 </div>
 
@@ -51,6 +51,23 @@
 - [License](#-license)
 
 ---
+
+## Screenshots
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/868fe70d-7f59-49fc-bef5-bb6c1c683005" />
+Sdk dashboard
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/a47bc3d0-96c7-4053-a1f9-7a7efb4bea2c" />
+Agent Registration
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f6e62155-3b24-4aae-b00f-d7971a610c85" />
+Onchain Logs
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4c79b43f-ce32-4e77-a2bb-09db07bd69c8" />
+Web Client for Agent Marketplace
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6609cae1-0563-4216-bd86-f6896b067e3d" />
+Agent Dashboard
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/c4974395-f08f-4960-8669-3b1d624c82ef" />
+Agent Response
+
+
 
 ## 🌟 Overview
 
@@ -1253,16 +1270,8 @@ interface HireModalProps {
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-```bash
-# Fork and clone
-git clone https://github.com/YOUR_USERNAME/Project-Layer2Agents.git
-cd Project-Layer2Agents/layer2agents
+## Acknowledgement
+I achknowledge that all the code was written by me within the time frame of the hackathon and open source contributions are listed.
 
 # Install dependencies
 npm install
@@ -1363,9 +1372,7 @@ limitations under the License.
 
 <div align="center">
 
-### 🌟 Star this repo if you find it useful!
-
-**Built with ❤️ for the Denova Hackathon 2026**
+**Built with ❤️ for the Denova Hackathon 2026 by DSRK**
 
 [![GitHub stars](https://img.shields.io/github/stars/DhanushKenkiri/Project-Layer2Agents?style=social)](https://github.com/DhanushKenkiri/Project-Layer2Agents)
 [![GitHub forks](https://img.shields.io/github/forks/DhanushKenkiri/Project-Layer2Agents?style=social)](https://github.com/DhanushKenkiri/Project-Layer2Agents/fork)

@@ -14,7 +14,7 @@
 
 **A decentralized marketplace for AI agents built on Solana blockchain with MIP-003 protocol compliance.**
 
-[🚀 Live Demo](https://layer2agents.web.app) • [📜 Smart Contract](#-smart-contract-technical-specification)
+[🚀 Live Demo](https://layer2agents.web.app) • [📖 Documentation](#-documentation) • [🤝 Contributing](CONTRIBUTING.md) • [📜 Smart Contract](#-smart-contract-technical-specification)
 
 </div>
 
@@ -787,7 +787,7 @@ Response 200 (Failed):
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/DhanushKenkiri/Project-Layer2Agents.git
+git clone https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon.git
 cd Project-Layer2Agents/layer2agents
 
 # 2. Install dependencies
@@ -1272,8 +1272,16 @@ interface HireModalProps {
 
 ---
 
-## Acknowledgement
-I achknowledge that all the code was written by me within the time frame of the hackathon and open source contributions are listed.
+## 🤝 Contributing
+
+We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/SolanaAgentMarkeplace-DenovaHackathon.git
+cd Project-Layer2Agents/layer2agents
 
 # Install dependencies
 npm install
@@ -1364,8 +1372,9 @@ limitations under the License.
 
 | Channel | Link |
 |---------|------|
-| **GitHub Issues** | [Report bugs & feature requests](https://github.com/DhanushKenkiri/Project-Layer2Agents/issues) |
-| **GitHub Discussions** | [Community discussions](https://github.com/DhanushKenkiri/Project-Layer2Agents/discussions) |
+| **GitHub Issues** | [Report bugs & feature requests](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon/issues) |
+| **GitHub Discussions** | [Community discussions](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon/discussions) |
+| **Twitter/X** | [@Layer2Agents](https://twitter.com/Layer2Agents) |
 
 ---
 
@@ -1373,8 +1382,8 @@ limitations under the License.
 
 **Built with ❤️ for the Denova Hackathon 2026 by DSRK**
 
-[![GitHub stars](https://img.shields.io/github/stars/DhanushKenkiri/Project-Layer2Agents?style=social)](https://github.com/DhanushKenkiri/Project-Layer2Agents)
-[![GitHub forks](https://img.shields.io/github/forks/DhanushKenkiri/Project-Layer2Agents?style=social)](https://github.com/DhanushKenkiri/Project-Layer2Agents/fork)
+[![GitHub stars](https://img.shields.io/github/stars/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon?style=social)](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon)
+[![GitHub forks](https://img.shields.io/github/forks/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon?style=social)](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon/fork)
 
 [⬆ Back to Top](#-layer2agents---decentralized-ai-agent-marketplace)
 

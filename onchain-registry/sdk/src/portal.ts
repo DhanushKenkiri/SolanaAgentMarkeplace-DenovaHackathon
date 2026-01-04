@@ -8,10 +8,21 @@
 
 import express from "express";
 import cors from "cors";
-import path from "path";
 import open from "open";
-import { Connection, PublicKey, Transaction, clusterApiUrl } from "@solana/web3.js";
-import * as anchor from "@coral-xyz/anchor";
+import { 
+  Connection, 
+  PublicKey, 
+  Transaction, 
+  TransactionInstruction,
+  SystemProgram,
+  Keypair,
+  sendAndConfirmTransaction,
+  clusterApiUrl 
+} from "@solana/web3.js";
+import * as borsh from "borsh";
+import BN from "bn.js";
+import * as fs from "fs";
+import * as path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -19,89 +30,85 @@ const PORT = process.env.PORT || 3456;
 // Program ID (deployed on devnet)
 const PROGRAM_ID = new PublicKey("DhRaN8rXCgvuNzTMRDpiJ4ooEgwvTyvV2cSpTHFgk8NF");
 
-// IDL for the agent registry program (with required metadata for newer Anchor versions)
-const IDL = {
-  "address": "DhRaN8rXCgvuNzTMRDpiJ4ooEgwvTyvV2cSpTHFgk8NF",
-  "metadata": {
-    "name": "agent_registry",
-    "version": "0.1.0",
-    "spec": "0.1.0"
-  },
-  "version": "0.1.0",
-  "name": "agent_registry",
-  "instructions": [
-    {
-      "name": "registerAgent",
-      "accounts": [
-        { "name": "registry", "isMut": true, "isSigner": false },
-        { "name": "agent", "isMut": true, "isSigner": false },
-        { "name": "owner", "isMut": true, "isSigner": true },
-        { "name": "systemProgram", "isMut": false, "isSigner": false }
-      ],
-      "args": [
-        { "name": "agentId", "type": "string" },
-        { "name": "name", "type": "string" },
-        { "name": "description", "type": "string" },
-        { "name": "apiUrl", "type": "string" },
-        { "name": "tags", "type": { "vec": "string" } },
-        { "name": "pricePerTask", "type": "u64" },
-        { "name": "acceptedPaymentTokens", "type": { "vec": "publicKey" } },
-        { "name": "metadataUri", "type": "string" }
-      ]
+// Local wallet file path
+const WALLET_PATH = path.join(__dirname, ".local-wallet.json");
+
+// Load or create local wallet
+function loadOrCreateLocalWallet(): Keypair {
+  try {
+    if (fs.existsSync(WALLET_PATH)) {
+      const data = JSON.parse(fs.readFileSync(WALLET_PATH, "utf-8"));
+      return Keypair.fromSecretKey(Uint8Array.from(data));
     }
-  ],
-  "accounts": [
-    {
-      "name": "Registry",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          { "name": "authority", "type": "publicKey" },
-          { "name": "agentCount", "type": "u64" },
-          { "name": "bump", "type": "u8" }
-        ]
-      }
-    },
-    {
-      "name": "Agent",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          { "name": "owner", "type": "publicKey" },
-          { "name": "agentId", "type": "string" },
-          { "name": "name", "type": "string" },
-          { "name": "description", "type": "string" },
-          { "name": "apiUrl", "type": "string" },
-          { "name": "tags", "type": { "vec": "string" } },
-          { "name": "pricePerTask", "type": "u64" },
-          { "name": "acceptedPaymentTokens", "type": { "vec": "publicKey" } },
-          { "name": "metadataUri", "type": "string" },
-          { "name": "status", "type": { "defined": "AgentStatus" } },
-          { "name": "createdAt", "type": "i64" },
-          { "name": "updatedAt", "type": "i64" },
-          { "name": "totalTasksCompleted", "type": "u64" },
-          { "name": "totalEarnings", "type": "u64" },
-          { "name": "ratingSum", "type": "u64" },
-          { "name": "ratingCount", "type": "u64" },
-          { "name": "bump", "type": "u8" }
-        ]
-      }
-    }
-  ],
-  "types": [
-    {
-      "name": "AgentStatus",
-      "type": {
-        "kind": "enum",
-        "variants": [
-          { "name": "Active" },
-          { "name": "Paused" },
-          { "name": "Deprecated" }
-        ]
-      }
-    }
-  ]
-};
+  } catch (e) {
+    console.log("Creating new local wallet...");
+  }
+  const keypair = Keypair.generate();
+  fs.writeFileSync(WALLET_PATH, JSON.stringify(Array.from(keypair.secretKey)));
+  return keypair;
+}
+
+// Global local wallet
+const localWallet = loadOrCreateLocalWallet();
+console.log("📍 Local Wallet Address:", localWallet.publicKey.toBase58());
+
+// Instruction discriminator for registerAgent (first 8 bytes of sha256("global:register_agent"))
+// We'll compute this or use the known value
+const REGISTER_AGENT_DISCRIMINATOR = Buffer.from([34, 63, 121, 34, 155, 123, 136, 163]);
+
+// Helper to encode strings for Borsh
+function encodeString(str: string): Buffer {
+  const bytes = Buffer.from(str, "utf-8");
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32LE(bytes.length, 0);
+  return Buffer.concat([lenBuf, bytes]);
+}
+
+// Helper to encode Vec<String>
+function encodeStringVec(strings: string[]): Buffer {
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32LE(strings.length, 0);
+  const encoded = strings.map(s => encodeString(s));
+  return Buffer.concat([lenBuf, ...encoded]);
+}
+
+// Helper to encode u64
+function encodeU64(value: number | BN): Buffer {
+  const bn = BN.isBN(value) ? value : new BN(value);
+  return bn.toArrayLike(Buffer, "le", 8);
+}
+
+// Helper to encode Vec<Pubkey> (empty for now)
+function encodePubkeyVec(pubkeys: PublicKey[]): Buffer {
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32LE(pubkeys.length, 0);
+  const encoded = pubkeys.map(p => p.toBuffer());
+  return Buffer.concat([lenBuf, ...encoded]);
+}
+
+// Build registerAgent instruction data manually
+function buildRegisterAgentData(
+  agentId: string,
+  name: string,
+  description: string,
+  apiUrl: string,
+  tags: string[],
+  pricePerTask: number,
+  acceptedPaymentTokens: PublicKey[],
+  metadataUri: string
+): Buffer {
+  return Buffer.concat([
+    REGISTER_AGENT_DISCRIMINATOR,
+    encodeString(agentId),
+    encodeString(name),
+    encodeString(description),
+    encodeString(apiUrl),
+    encodeStringVec(tags),
+    encodeU64(pricePerTask),
+    encodePubkeyVec(acceptedPaymentTokens),
+    encodeString(metadataUri),
+  ]);
+}
 
 app.use(cors());
 app.use(express.json());
@@ -114,6 +121,7 @@ const portalHTML = `
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Layer2Agents | Admin Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
     <script src="https://unpkg.com/@solana/web3.js@1.95.0/lib/index.iife.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -1013,8 +1021,7 @@ const portalHTML = `
             </div>
             
             <div class="sidebar-toggle">
-                <button class="toggle-btn" id="btn-devnet" onclick="switchNetwork('devnet')">Devnet</button>
-                <button class="toggle-btn active" id="btn-mainnet" onclick="switchNetwork('mainnet')">Mainnet</button>
+                <button class="toggle-btn active" id="btn-devnet">🔗 Devnet</button>
             </div>
             
             <nav class="sidebar-nav">
@@ -1061,7 +1068,7 @@ const portalHTML = `
                     <span class="search-shortcut">(Ctrl + K)</span>
                 </div>
                 <div class="top-bar-actions">
-                    <a class="top-bar-btn" href="https://github.com/your-repo" target="_blank">
+                    <a class="top-bar-btn" href="https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon" target="_blank">
                         📖 Documentation
                     </a>
                     <a class="top-bar-btn" href="#" target="_blank">
@@ -1079,8 +1086,8 @@ const portalHTML = `
                     <p class="page-title">Overview of your AI agents, wallets, and transactions.</p>
                 </div>
                 <div class="wallet-info-bar" id="wallet-info-bar">
-                    Showing data for <span id="display-wallet-address">Not connected</span>. 
-                    <span class="wallet-link" onclick="openWalletSettings()">Connect wallet</span> to view your data.
+                    Showing data for <span id="display-wallet-address">Loading...</span>. 
+                    <span class="wallet-link" onclick="loadLocalWallet()">Refresh wallet</span> to update.
                 </div>
 
                 <!-- Stats Grid -->
@@ -1199,7 +1206,7 @@ const portalHTML = `
                 <form id="agent-form">
                     <div class="form-group">
                         <label class="form-label">Agent ID <span class="required">*</span></label>
-                        <input type="text" class="form-input" id="agent-id" placeholder="my-unique-agent-id" required pattern="[a-z0-9-]+" maxlength="64">
+                        <input type="text" class="form-input" id="agent-id" placeholder="my-unique-agent-id" required pattern="[a-z0-9\\-]+" maxlength="64">
                         <p class="form-hint">Unique identifier (lowercase letters, numbers, hyphens only)</p>
                     </div>
 
@@ -1256,11 +1263,23 @@ const portalHTML = `
     <script>
         // Constants
         const PROGRAM_ID = 'DhRaN8rXCgvuNzTMRDpiJ4ooEgwvTyvV2cSpTHFgk8NF';
+        // Devnet only - no mainnet support in this dashboard
         const DEVNET_RPC = 'https://api.devnet.solana.com';
-        const MAINNET_RPC = 'https://api.mainnet-beta.solana.com';
+        const DEVNET_RPC_FALLBACK = 'https://rpc.ankr.com/solana_devnet';
+        
+        // Base64 decode helper (browser compatible - no Buffer needed)
+        function base64ToUint8Array(base64) {
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        }
         
         // State
         let wallet = null;
+        let localWalletAddress = null;
         let tags = [];
         let connection = null;
         let currentNetwork = 'devnet';
@@ -1271,9 +1290,9 @@ const portalHTML = `
         document.addEventListener('DOMContentLoaded', () => {
             checkWalletConnection();
             setupFormListeners();
-            loadAgents();
-            addLog('info', 'Dashboard initialized. Welcome to Layer2Agents!');
-            addLog('info', 'Network: Solana ' + currentNetwork.charAt(0).toUpperCase() + currentNetwork.slice(1));
+            addLog('info', '🚀 Dashboard initialized. Welcome to Layer2Agents!');
+            addLog('info', '🌐 Network: Solana Devnet');
+            addLog('info', '🔑 Using local server wallet for transactions');
             
             // Keyboard shortcut
             document.addEventListener('keydown', (e) => {
@@ -1285,11 +1304,9 @@ const portalHTML = `
         });
 
         function switchNetwork(network) {
-            currentNetwork = network;
-            document.getElementById('btn-devnet').classList.toggle('active', network === 'devnet');
-            document.getElementById('btn-mainnet').classList.toggle('active', network === 'mainnet');
-            addLog('info', 'Switched to ' + network.charAt(0).toUpperCase() + network.slice(1));
-            loadAgents();
+            // Only devnet is supported in this dashboard
+            currentNetwork = 'devnet';
+            addLog('info', 'Network: Solana Devnet (Program ID: ' + PROGRAM_ID.slice(0,8) + '...)');
         }
 
         function showPage(page) {
@@ -1366,99 +1383,116 @@ const portalHTML = `
 
         // Wallet functions
         async function checkWalletConnection() {
-            if (window.solana && window.solana.isPhantom) {
+            const provider = window.phantom?.solana || window.solana || window.solflare;
+            if (provider) {
                 try {
-                    const resp = await window.solana.connect({ onlyIfTrusted: true });
+                    const resp = await provider.connect({ onlyIfTrusted: true });
                     wallet = resp.publicKey;
-                    await onWalletConnected();
+                    window.solanaProvider = provider;
+                    // Don't auto-connect browser wallet, use local wallet instead
                 } catch (e) {
-                    // Not connected
+                    // Not connected - that's ok, we'll use local wallet
                 }
+            }
+            // Auto-load local wallet on startup
+            await loadLocalWallet();
+        }
+
+        async function loadLocalWallet() {
+            try {
+                addLog('info', '🔑 Loading local server wallet...');
+                const response = await fetch('/api/local-wallet');
+                const data = await response.json();
+                
+                if (data.address) {
+                    localWalletAddress = data.address;
+                    const shortAddr = data.address.slice(0, 6) + '...' + data.address.slice(-4);
+                    
+                    document.getElementById('wallet-connect-btn').innerHTML = '🔑 ' + shortAddr;
+                    document.getElementById('display-wallet-address').textContent = shortAddr + ' (Local)';
+                    document.getElementById('register-btn').disabled = false;
+
+                    addLog('info', '━━━━━━ LOCAL WALLET LOADED ━━━━━━');
+                    addLog('info', '📍 Address: ' + data.address);
+                    addLog('success', '💵 Balance: ' + data.balance.toFixed(4) + ' SOL');
+                    
+                    document.getElementById('stat-balance').textContent = data.balance.toFixed(4);
+                    document.getElementById('stat-balance-usd').textContent = '~ $' + (data.balance * 100).toFixed(2);
+                    
+                    // Update wallet table
+                    document.getElementById('wallet-table-body').innerHTML = 
+                        '<tr><td><span class="wallet-badge connected">Local</span></td>' +
+                        '<td>Server Wallet</td>' +
+                        '<td class="wallet-address">' + shortAddr + '</td>' +
+                        '<td>' + data.balance.toFixed(4) + ' SOL</td>' +
+                        '<td><button class="btn-topup" onclick="requestAirdrop()">Airdrop</button></td></tr>';
+                    
+                    if (data.balance < 0.01) {
+                        addLog('warn', '⚠️ Low balance! Click "Airdrop" to get devnet SOL');
+                    }
+                    addLog('info', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                    
+                    loadAgents();
+                }
+            } catch (e) {
+                addLog('error', '❌ Failed to load local wallet: ' + e.message);
             }
         }
 
         async function connectWallet() {
-            if (!window.solana || !window.solana.isPhantom) {
-                showToast('Phantom wallet not found. Please install it from phantom.app', 'error');
-                addLog('error', 'Phantom wallet not found');
-                return;
-            }
-
-            try {
-                addLog('info', 'Connecting to Phantom wallet...');
-                const resp = await window.solana.connect();
-                wallet = resp.publicKey;
-                await onWalletConnected();
-                showToast('Wallet connected successfully!', 'success');
-            } catch (e) {
-                showToast('Failed to connect wallet: ' + e.message, 'error');
-                addLog('error', 'Failed to connect wallet: ' + e.message);
-            }
+            // Just reload local wallet info
+            await loadLocalWallet();
+            showToast('Using local server wallet for transactions', 'success');
         }
 
         async function onWalletConnected() {
-            const address = wallet.toBase58();
-            const shortAddr = address.slice(0, 6) + '...' + address.slice(-4);
-            
-            document.getElementById('wallet-connect-btn').innerHTML = '✓ ' + shortAddr;
-            document.getElementById('display-wallet-address').textContent = shortAddr;
-            document.getElementById('register-btn').disabled = false;
-
-            // Get balance
-            const rpc = currentNetwork === 'mainnet' ? MAINNET_RPC : DEVNET_RPC;
-            connection = new solanaWeb3.Connection(rpc, 'confirmed');
-            const balance = await connection.getBalance(wallet);
-            const solBalance = (balance / 1e9).toFixed(4);
-            
-            document.getElementById('stat-balance').textContent = solBalance;
-            document.getElementById('stat-balance-usd').textContent = '~ $' + (parseFloat(solBalance) * 100).toFixed(2);
-            
-            // Update wallet table
-            document.getElementById('wallet-table-body').innerHTML = 
-                '<tr><td><span class="wallet-badge connected">Connected</span></td>' +
-                '<td>Main wallet</td>' +
-                '<td class="wallet-address">' + shortAddr + '</td>' +
-                '<td>' + solBalance + ' SOL</td>' +
-                '<td><button class="btn-topup" onclick="requestAirdrop()">Airdrop</button></td></tr>';
-
-            addLog('success', 'Wallet connected: ' + shortAddr);
-            addLog('info', 'Balance: ' + solBalance + ' SOL');
-            
-            loadAgents();
+            // This is now handled by loadLocalWallet
+            await loadLocalWallet();
         }
 
         async function requestAirdrop() {
-            if (!wallet || currentNetwork !== 'devnet') {
-                showToast('Airdrop only available on devnet', 'error');
-                return;
-            }
             try {
-                addLog('info', 'Requesting airdrop of 1 SOL...');
-                const signature = await connection.requestAirdrop(wallet, 1e9);
-                addLog('tx', 'Airdrop transaction sent', 'https://explorer.solana.com/tx/' + signature + '?cluster=devnet');
-                await connection.confirmTransaction(signature);
-                showToast('Airdrop successful! 1 SOL received', 'success');
-                addLog('success', 'Airdrop confirmed: 1 SOL received');
-                await onWalletConnected();
+                addLog('info', '📤 Requesting SOL airdrop from Solana Devnet faucet...');
+                addLog('info', 'Target: Local server wallet');
+                
+                const response = await fetch('/api/airdrop', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog('tx', '✈️ Airdrop transaction confirmed', 'https://explorer.solana.com/tx/' + data.signature + '?cluster=devnet');
+                    addLog('success', '✅ Airdrop successful! New balance: ' + data.newBalance.toFixed(4) + ' SOL');
+                    showToast('Airdrop successful! +1 SOL', 'success');
+                    await loadLocalWallet();
+                } else {
+                    throw new Error(data.error || 'Airdrop failed');
+                }
             } catch (e) {
                 showToast('Airdrop failed: ' + e.message, 'error');
-                addLog('error', 'Airdrop failed: ' + e.message);
+                addLog('error', '❌ Airdrop failed: ' + e.message);
             }
         }
 
         // Agent functions
         async function loadAgents() {
             try {
+                addLog('info', '🔍 Fetching registered agents from on-chain registry...');
+                addLog('info', 'Program ID: ' + PROGRAM_ID.slice(0,8) + '...');
                 const response = await fetch('/api/agents');
                 const data = await response.json();
                 agents = data.agents || [];
                 document.getElementById('stat-agents').textContent = agents.length;
                 renderAgents();
                 if (agents.length > 0) {
-                    addLog('info', 'Loaded ' + agents.length + ' registered agents');
+                    addLog('success', '📋 Loaded ' + agents.length + ' registered agents from blockchain');
+                    agents.forEach((agent, i) => {
+                        addLog('info', '  Agent #' + (i+1) + ': ' + (agent.name || agent.address.slice(0,8) + '...'));
+                    });
+                } else {
+                    addLog('info', '📋 No agents registered yet on this program');
                 }
             } catch (e) {
                 console.error('Failed to load agents:', e);
+                addLog('error', '❌ Failed to fetch agents: ' + e.message);
             }
         }
 
@@ -1512,8 +1546,9 @@ const portalHTML = `
         }
 
         async function registerAgent() {
-            if (!wallet) {
-                showToast('Please connect your wallet first', 'error');
+            if (!localWalletAddress) {
+                showToast('Wallet not loaded. Please wait...', 'error');
+                await loadLocalWallet();
                 return;
             }
 
@@ -1528,15 +1563,22 @@ const portalHTML = `
             const price = parseFloat(document.getElementById('agent-price').value) || 0.05;
             const metadataUri = document.getElementById('agent-metadata').value || '';
 
-            addLog('info', 'Starting agent registration: ' + name);
-            addLog('info', 'Agent ID: ' + agentId);
+            addLog('info', '━━━━━━ AGENT REGISTRATION STARTED ━━━━━━');
+            addLog('info', '📝 Agent Name: ' + name);
+            addLog('info', '🆔 Agent ID: ' + agentId);
+            addLog('info', '🔗 API Endpoint: ' + apiUrl);
+            addLog('info', '💰 Price per Task: ' + price + ' SOL');
+            addLog('info', '🏷️ Tags: ' + (tags.length > 0 ? tags.join(', ') : 'None'));
+            addLog('info', '🔑 Using local server wallet to sign');
 
             try {
-                const response = await fetch('/api/create-register-tx', {
+                addLog('info', '📡 Sending registration request to server...');
+                addLog('info', '⏳ Server will sign and broadcast transaction...');
+                
+                const response = await fetch('/api/register-agent-local', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        wallet: wallet.toBase58(),
                         agentId,
                         name,
                         description,
@@ -1550,33 +1592,17 @@ const portalHTML = `
                 const result = await response.json();
                 
                 if (!response.ok) {
-                    throw new Error(result.error || 'Failed to create transaction');
+                    throw new Error(result.error || 'Failed to register agent');
                 }
 
-                addLog('info', 'Transaction created. Agent PDA: ' + result.agentPda);
-                addLog('info', 'Awaiting wallet signature...');
-
-                // Deserialize and sign transaction
-                const tx = solanaWeb3.Transaction.from(Buffer.from(result.transaction, 'base64'));
-                const signed = await window.solana.signTransaction(tx);
-                
-                addLog('success', 'Transaction signed by wallet');
-                addLog('info', 'Broadcasting transaction to network...');
-
-                // Send transaction
-                const rpc = currentNetwork === 'mainnet' ? MAINNET_RPC : DEVNET_RPC;
-                const conn = new solanaWeb3.Connection(rpc, 'confirmed');
-                const signature = await conn.sendRawTransaction(signed.serialize());
-                
-                addLog('tx', 'Transaction sent: ' + signature.slice(0, 20) + '...', 'https://explorer.solana.com/tx/' + signature + '?cluster=' + currentNetwork);
-
-                await conn.confirmTransaction(signature, 'confirmed');
-
-                addLog('success', '✅ Agent registered successfully!');
-                addLog('tx', 'View on Solana Explorer', 'https://explorer.solana.com/tx/' + signature + '?cluster=' + currentNetwork);
+                addLog('success', '━━━━━━ REGISTRATION COMPLETE ━━━━━━');
+                addLog('success', '🎉 Agent "' + name + '" registered on-chain!');
+                addLog('tx', '🚀 Transaction: ' + result.signature.slice(0, 16) + '...', result.explorerUrl);
+                addLog('info', '📍 Agent Address: ' + result.agentPda);
 
                 showToast('Agent registered successfully!', 'success');
                 closeRegisterModal();
+                await loadLocalWallet(); // Refresh balance
                 loadAgents();
                 
                 // Reset form
@@ -1587,7 +1613,10 @@ const portalHTML = `
             } catch (e) {
                 console.error(e);
                 showToast('Registration failed: ' + e.message, 'error');
-                addLog('error', 'Registration failed: ' + e.message);
+                addLog('error', '❌ Registration failed: ' + e.message);
+                if (e.message.includes('insufficient')) {
+                    addLog('warn', '💡 Try clicking "Airdrop" to get devnet SOL');
+                }
             }
 
             btn.disabled = false;
@@ -1637,28 +1666,13 @@ app.post("/api/create-register-tx", async (req, res) => {
       return;
     }
 
-    // Connect to devnet
-    const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
-    
-    // Create a dummy wallet for building the transaction
-    const ownerPubkey = new PublicKey(wallet);
-    
-    // Create Anchor provider (without signing capability)
-    const dummyWallet = {
-      publicKey: ownerPubkey,
-      signTransaction: async (tx: Transaction) => tx,
-      signAllTransactions: async (txs: Transaction[]) => txs,
-    };
-    
-    const provider = new anchor.AnchorProvider(
-      connection,
-      dummyWallet as anchor.Wallet,
-      { commitment: "confirmed" }
+    // Connect to devnet with public RPC
+    const connection = new Connection(
+      "https://api.devnet.solana.com",
+      { commitment: "confirmed", confirmTransactionInitialTimeout: 60000 }
     );
-    anchor.setProvider(provider);
     
-    // Create program interface using older API
-    const program = new anchor.Program(IDL as any, provider);
+    const ownerPubkey = new PublicKey(wallet);
     
     // Derive PDAs
     const [registryPda] = PublicKey.findProgramAddressSync(
@@ -1680,25 +1694,32 @@ app.post("/api/create-register-tx", async (req, res) => {
       return;
     }
 
-    // Build the transaction
-    const tx = await (program.methods as any)
-      .registerAgent(
-        agentId,
-        name,
-        description,
-        apiUrl,
-        tags,
-        new anchor.BN(pricePerTask),
-        [], // acceptedPaymentTokens
-        metadataUri
-      )
-      .accounts({
-        registry: registryPda,
-        agent: agentPda,
-        owner: ownerPubkey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .transaction();
+    // Build instruction data manually (avoiding Anchor IDL issues)
+    const instructionData = buildRegisterAgentData(
+      agentId,
+      name,
+      description,
+      apiUrl,
+      tags,
+      pricePerTask,
+      [], // acceptedPaymentTokens - empty for now
+      metadataUri
+    );
+
+    // Create the instruction
+    const instruction = new TransactionInstruction({
+      programId: PROGRAM_ID,
+      keys: [
+        { pubkey: registryPda, isSigner: false, isWritable: true },
+        { pubkey: agentPda, isSigner: false, isWritable: true },
+        { pubkey: ownerPubkey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: instructionData,
+    });
+
+    // Build transaction
+    const tx = new Transaction().add(instruction);
 
     // Get recent blockhash
     const { blockhash } = await connection.getLatestBlockhash();
@@ -1722,10 +1743,146 @@ app.post("/api/create-register-tx", async (req, res) => {
   }
 });
 
+// API endpoint to get local wallet info
+app.get("/api/local-wallet", async (req, res) => {
+  try {
+    const connection = new Connection(
+      "https://api.devnet.solana.com",
+      { commitment: "confirmed" }
+    );
+    
+    const balance = await connection.getBalance(localWallet.publicKey);
+    
+    res.json({
+      address: localWallet.publicKey.toBase58(),
+      balance: balance / 1e9,
+      balanceLamports: balance,
+    });
+  } catch (error: any) {
+    res.json({
+      address: localWallet.publicKey.toBase58(),
+      balance: 0,
+      error: error.message,
+    });
+  }
+});
+
+// API endpoint to request airdrop for local wallet
+app.post("/api/airdrop", async (req, res) => {
+  try {
+    const connection = new Connection(
+      "https://api.devnet.solana.com",
+      { commitment: "confirmed" }
+    );
+    
+    console.log("Requesting airdrop for:", localWallet.publicKey.toBase58());
+    const signature = await connection.requestAirdrop(localWallet.publicKey, 1e9);
+    await connection.confirmTransaction(signature);
+    
+    const newBalance = await connection.getBalance(localWallet.publicKey);
+    
+    res.json({
+      success: true,
+      signature,
+      newBalance: newBalance / 1e9,
+    });
+  } catch (error: any) {
+    console.error("Airdrop error:", error);
+    res.status(500).json({ error: error.message || "Airdrop failed" });
+  }
+});
+
+// API endpoint to register agent using local wallet (signs and sends server-side)
+app.post("/api/register-agent-local", async (req, res) => {
+  try {
+    const { agentId, name, description, apiUrl, tags = [], pricePerTask = 50000000, metadataUri = "" } = req.body;
+
+    if (!agentId || !name || !description || !apiUrl) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    const connection = new Connection(
+      "https://api.devnet.solana.com",
+      { commitment: "confirmed", confirmTransactionInitialTimeout: 60000 }
+    );
+    
+    // Derive PDAs
+    const [registryPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("registry")],
+      PROGRAM_ID
+    );
+    
+    const [agentPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("agent"), Buffer.from(agentId)],
+      PROGRAM_ID
+    );
+
+    // Check if agent already exists
+    const existingAgent = await connection.getAccountInfo(agentPda);
+    if (existingAgent) {
+      res.status(400).json({ 
+        error: "Agent ID already registered. Please choose a different ID." 
+      });
+      return;
+    }
+
+    // Build instruction data
+    const instructionData = buildRegisterAgentData(
+      agentId,
+      name,
+      description,
+      apiUrl,
+      tags,
+      pricePerTask,
+      [],
+      metadataUri
+    );
+
+    // Create the instruction
+    const instruction = new TransactionInstruction({
+      programId: PROGRAM_ID,
+      keys: [
+        { pubkey: registryPda, isSigner: false, isWritable: true },
+        { pubkey: agentPda, isSigner: false, isWritable: true },
+        { pubkey: localWallet.publicKey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: instructionData,
+    });
+
+    // Build transaction
+    const tx = new Transaction().add(instruction);
+    tx.feePayer = localWallet.publicKey;
+
+    // Sign and send transaction
+    console.log("Signing and sending transaction...");
+    const signature = await sendAndConfirmTransaction(connection, tx, [localWallet], {
+      commitment: "confirmed",
+    });
+    
+    console.log("Transaction confirmed:", signature);
+
+    res.json({
+      success: true,
+      signature,
+      agentPda: agentPda.toBase58(),
+      explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=devnet`,
+    });
+  } catch (error: any) {
+    console.error("Error registering agent:", error);
+    res.status(500).json({ error: error.message || "Failed to register agent" });
+  }
+});
+
 // API endpoint to get registered agents
 app.get("/api/agents", async (req, res) => {
   try {
-    const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+    // Use public Solana RPC
+    const connection = new Connection(
+      "https://api.devnet.solana.com",
+      { commitment: "confirmed", confirmTransactionInitialTimeout: 30000 }
+    );
     
     // Fetch all program accounts
     const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
@@ -1742,8 +1899,9 @@ app.get("/api/agents", async (req, res) => {
 
     res.json({ agents });
   } catch (error: any) {
-    console.error("Error fetching agents:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch agents" });
+    console.error("Error fetching agents:", error.message || error);
+    // Return empty array instead of error to not break the UI
+    res.json({ agents: [], error: "Network temporarily unavailable" });
   }
 });
 

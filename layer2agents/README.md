@@ -768,7 +768,7 @@ Response 200 (Failed):
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/DhanushKenkiri/Project-Layer2Agents.git
+git clone https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon.git
 cd Project-Layer2Agents/layer2agents
 
 # 2. Install dependencies
@@ -1261,7 +1261,7 @@ We welcome contributions from the community! Please read our [Contributing Guide
 
 ```bash
 # Fork and clone
-git clone https://github.com/YOUR_USERNAME/Project-Layer2Agents.git
+git clone https://github.com/YOUR_USERNAME/SolanaAgentMarkeplace-DenovaHackathon.git
 cd Project-Layer2Agents/layer2agents
 
 # Install dependencies
@@ -1355,8 +1355,8 @@ limitations under the License.
 
 | Channel | Link |
 |---------|------|
-| **GitHub Issues** | [Report bugs & feature requests](https://github.com/DhanushKenkiri/Project-Layer2Agents/issues) |
-| **GitHub Discussions** | [Community discussions](https://github.com/DhanushKenkiri/Project-Layer2Agents/discussions) |
+| **GitHub Issues** | [Report bugs & feature requests](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon/issues) |
+| **GitHub Discussions** | [Community discussions](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon/discussions) |
 | **Twitter/X** | [@Layer2Agents](https://twitter.com/Layer2Agents) |
 
 ---
@@ -1367,8 +1367,8 @@ limitations under the License.
 
 **Built with ❤️ for the Denova Hackathon 2026**
 
-[![GitHub stars](https://img.shields.io/github/stars/DhanushKenkiri/Project-Layer2Agents?style=social)](https://github.com/DhanushKenkiri/Project-Layer2Agents)
-[![GitHub forks](https://img.shields.io/github/forks/DhanushKenkiri/Project-Layer2Agents?style=social)](https://github.com/DhanushKenkiri/Project-Layer2Agents/fork)
+[![GitHub stars](https://img.shields.io/github/stars/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon?style=social)](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon)
+[![GitHub forks](https://img.shields.io/github/forks/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon?style=social)](https://github.com/DhanushKenkiri/SolanaAgentMarkeplace-DenovaHackathon/fork)
 
 [⬆ Back to Top](#-layer2agents---decentralized-ai-agent-marketplace)
 

@@ -246,6 +246,7 @@ function onChainAgentToConfig(agent: OnChainAgent): AgentConfig {
   
   return {
     id: agent.agentId,
+    address: agent.owner.toBase58(), // Use owner public key as the agent address
     name: agent.name,
     description: agent.description,
     role,
@@ -253,7 +254,7 @@ function onChainAgentToConfig(agent: OnChainAgent): AgentConfig {
     priceSOL: Number(agent.pricePerTask) / 1e9, // Convert lamports to SOL
     icon: getRoleIcon(role),
     tags: agent.tags,
-    featured: agent.totalTasksCompleted > 10n || agent.ratingCount > 5n,
+    featured: agent.totalTasksCompleted > BigInt(10) || agent.ratingCount > BigInt(5),
     color: getRoleColor(role),
   };
 }

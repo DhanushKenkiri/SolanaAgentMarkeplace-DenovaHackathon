@@ -7,6 +7,7 @@ export type AgentRole = "sales" | "research" | "development" | "writing" | "anal
 
 export interface AgentConfig {
   id: string;
+  address: string; // Solana wallet address for the agent
   name: string;
   description: string;
   role: AgentRole;
@@ -21,6 +22,7 @@ export interface AgentConfig {
 export const AGENT_REGISTRY: AgentConfig[] = [
   {
     id: "cold-outreach-agent",
+    address: "ColdEm1LAGent111111111111111111111111111111",
     name: "Cold Outreach Email Agent",
     description: "AI-powered personalized cold outreach email generator for B2B sales and business development. Creates compelling, professional emails tailored to your prospects.",
     role: "sales",
@@ -34,6 +36,7 @@ export const AGENT_REGISTRY: AgentConfig[] = [
   // Placeholder for future agents
   {
     id: "research-agent",
+    address: "ResearchAGent22222222222222222222222222222222",
     name: "Deep Research Agent",
     description: "Comprehensive research assistant that analyzes markets, competitors, and trends. Delivers structured reports with actionable insights.",
     role: "research",
@@ -46,6 +49,7 @@ export const AGENT_REGISTRY: AgentConfig[] = [
   },
   {
     id: "seo-agent",
+    address: "SEOAgentAddr33333333333333333333333333333333",
     name: "SEO Optimization Agent",
     description: "Analyzes your content and provides SEO recommendations, keyword strategies, and content optimization suggestions.",
     role: "analysis",
@@ -58,6 +62,7 @@ export const AGENT_REGISTRY: AgentConfig[] = [
   },
   {
     id: "code-review-agent",
+    address: "CodeReviewAgt44444444444444444444444444444444",
     name: "Code Review Agent",
     description: "Reviews your code for bugs, security vulnerabilities, and best practices. Supports multiple languages and frameworks.",
     role: "development",
@@ -70,13 +75,13 @@ export const AGENT_REGISTRY: AgentConfig[] = [
   },
 ];
 
-export const ROLE_CONFIG: Record<AgentRole, { label: string; color: string }> = {
-  sales: { label: "Sales", color: "bg-blue-500" },
-  research: { label: "Research", color: "bg-purple-500" },
-  development: { label: "Development", color: "bg-orange-500" },
-  writing: { label: "Writing", color: "bg-green-500" },
-  analysis: { label: "Analysis", color: "bg-cyan-500" },
-  design: { label: "Design", color: "bg-pink-500" },
+export const ROLE_CONFIG: Record<AgentRole, { label: string; color: string; icon: string }> = {
+  sales: { label: "Sales", color: "bg-blue-500", icon: "📧" },
+  research: { label: "Research", color: "bg-purple-500", icon: "🔬" },
+  development: { label: "Development", color: "bg-orange-500", icon: "💻" },
+  writing: { label: "Writing", color: "bg-green-500", icon: "✍️" },
+  analysis: { label: "Analysis", color: "bg-cyan-500", icon: "📊" },
+  design: { label: "Design", color: "bg-pink-500", icon: "🎨" },
 };
 
 export function getAgentById(id: string): AgentConfig | undefined {

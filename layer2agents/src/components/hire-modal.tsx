@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { X, Loader2, CheckCircle, AlertCircle, Wallet } from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { AgentConfig } from "@/lib/agents-registry";
 import { MIP003Client, InputFieldSchema, StartJobResponse } from "@/lib/mip003-client";
 import { useStore } from "@/lib/store";
-import { formatSOL, generatePurchaseIdentifier } from "@/lib/solana";
+import { formatSOL, generatePurchaseIdentifier, createPaymentTransaction, confirmTransaction } from "@/lib/solana";
 
 interface HireModalProps {
   agent: AgentConfig;
@@ -13,7 +14,7 @@ interface HireModalProps {
   onClose: () => void;
 }
 
-type ModalStep = "form" | "submitting" | "success" | "error";
+type ModalStep = "form" | "confirming" | "processing" | "success" | "error";
 
 export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
   const [step, setStep] = useState<ModalStep>("form");
@@ -22,12 +23,18 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jobResponse, setJobResponse] = useState<StartJobResponse | null>(null);
+  const [txSignature, setTxSignature] = useState<string | null>(null);
 
   const { addJob, walletAddress } = useStore();
+  const { publicKey, signTransaction, connected } = useWallet();
 
   // Fetch input schema when modal opens
   useEffect(() => {
     if (isOpen && agent.endpoint) {
+      setStep("form");
+      setError(null);
+      setTxSignature(null);
+      setJobResponse(null);
       fetchSchema();
     }
   }, [isOpen, agent.endpoint]);
@@ -57,16 +64,46 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStep("submitting");
+    
+    if (!connected || !publicKey || !signTransaction) {
+      setError("Please connect your wallet first");
+      return;
+    }
+
     setError(null);
+    setStep("confirming");
 
     try {
+      // Step 1: Create and sign the payment transaction
+      const transaction = await createPaymentTransaction(publicKey, agent.priceSOL);
+      
+      // Request user to sign the transaction
+      const signedTx = await signTransaction(transaction);
+      
+      // Send the transaction
+      const { connection } = await import("@/lib/solana");
+      const signature = await connection.sendRawTransaction(signedTx.serialize());
+      setTxSignature(signature);
+      
+      setStep("processing");
+      
+      // Step 2: Wait for transaction confirmation
+      const confirmed = await confirmTransaction(signature);
+      
+      if (!confirmed) {
+        throw new Error("Transaction failed to confirm. Please try again.");
+      }
+
+      // Step 3: Call the agent endpoint after payment is confirmed
       const client = new MIP003Client(agent.endpoint);
-      const purchaseId = generatePurchaseIdentifier(walletAddress || "guest");
+      const purchaseId = generatePurchaseIdentifier(walletAddress || publicKey.toBase58());
 
       const response = await client.startJob({
         identifier_from_purchaser: purchaseId,
-        input_data: formData,
+        input_data: {
+          ...formData,
+          payment_signature: signature,
+        },
       });
 
       setJobResponse(response);
@@ -85,7 +122,8 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
 
       setStep("success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start job");
+      console.error("Hire error:", err);
+      setError(err instanceof Error ? err.message : "Failed to process hire request");
       setStep("error");
     }
   };
@@ -202,6 +240,16 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* Wallet connection notice */}
+                  {!connected && (
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg mb-4">
+                      <p className="text-sm text-amber-400 flex items-center gap-2">
+                        <Wallet className="w-4 h-4" />
+                        Please connect your wallet to hire this agent
+                      </p>
+                    </div>
+                  )}
+                  
                   {schema.map((field) => (
                     <div key={field.id}>
                       <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -221,8 +269,9 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
                     <button type="button" onClick={onClose} className="btn-secondary">
                       Cancel
                     </button>
-                    <button type="submit" className="btn-primary">
-                      Submit Task
+                    <button type="submit" disabled={!connected} className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <Wallet className="w-4 h-4" />
+                      Pay &amp; Hire
                     </button>
                   </div>
                 </form>
@@ -230,13 +279,41 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
             </>
           )}
 
-          {step === "submitting" && (
+          {step === "confirming" && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 rounded-full bg-indigo-500/20 flex items-center justify-center mb-4 animate-pulse">
+                <Wallet className="w-8 h-8 text-indigo-400" />
+              </div>
+              <p className="text-lg font-medium mb-2">Confirm Transaction</p>
+              <p className="text-gray-400 text-sm text-center mb-2">
+                Please approve the transaction in your wallet
+              </p>
+              <p className="text-indigo-400 font-medium">
+                {formatSOL(agent.priceSOL)}
+              </p>
+              <p className="text-xs text-gray-500 mt-4">
+                Network: Solana Devnet
+              </p>
+            </div>
+          )}
+
+          {step === "processing" && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-12 h-12 animate-spin text-indigo-400 mb-4" />
-              <p className="text-lg font-medium">Submitting your task...</p>
-              <p className="text-gray-400 text-sm mt-2">
-                This may take a few seconds
+              <p className="text-lg font-medium mb-2">Processing...</p>
+              <p className="text-gray-400 text-sm text-center mb-4">
+                Transaction confirmed! Starting agent task...
               </p>
+              {txSignature && (
+                <a 
+                  href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-400 hover:underline"
+                >
+                  View transaction on Explorer →
+                </a>
+              )}
             </div>
           )}
 
@@ -245,13 +322,23 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
               <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
                 <CheckCircle className="w-10 h-10 text-green-400" />
               </div>
-              <p className="text-lg font-medium mb-2">Task Submitted!</p>
+              <p className="text-lg font-medium mb-2">Task Started!</p>
               <p className="text-gray-400 text-sm text-center mb-4">
                 Job ID: <code className="text-cyan-400">{jobResponse.job_id}</code>
               </p>
-              <p className="text-gray-400 text-sm text-center mb-6">
-                {jobResponse.message}
+              <p className="text-gray-400 text-sm text-center mb-4">
+                {jobResponse.message || "Your task is now being processed by the agent."}
               </p>
+              {txSignature && (
+                <a 
+                  href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-indigo-400 hover:underline mb-4"
+                >
+                  View payment transaction →
+                </a>
+              )}
               <button onClick={onClose} className="btn-primary">
                 View in Inbox
               </button>
@@ -263,7 +350,7 @@ export function HireModal({ agent, isOpen, onClose }: HireModalProps) {
               <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
                 <AlertCircle className="w-10 h-10 text-red-400" />
               </div>
-              <p className="text-lg font-medium mb-2">Submission Failed</p>
+              <p className="text-lg font-medium mb-2">Transaction Failed</p>
               <p className="text-red-400 text-sm text-center mb-6">{error}</p>
               <div className="flex gap-3">
                 <button onClick={() => setStep("form")} className="btn-secondary">

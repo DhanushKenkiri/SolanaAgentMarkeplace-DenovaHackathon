@@ -29,6 +29,7 @@ import TiltedCard from "@/components/ui/tilted-card";
 import { HireModal } from "@/components/hire-modal";
 import { AgentConfig, AGENT_REGISTRY, ROLE_CONFIG, AgentRole } from "@/lib/agents-registry";
 import { formatSOL } from "@/lib/solana";
+import { useAgents } from "@/lib/use-agents";
 import Link from "next/link";
 
 // Categories for filtering
@@ -280,24 +281,24 @@ export default function CatalogPage() {
   
   // Group agents by category/role
   const researchAgents = filteredAgents.filter(a => 
-    a.role === 'researcher' || a.tags.some(t => t.includes('research') || t.includes('analysis'))
+    a.role === 'research' || a.tags.some(t => t.toLowerCase().includes('research') || t.toLowerCase().includes('analysis'))
   );
   
   const reasoningAgents = filteredAgents.filter(a => 
-    a.tags.some(t => t.includes('reason') || t.includes('problem') || t.includes('logic'))
+    a.tags.some(t => t.toLowerCase().includes('reason') || t.toLowerCase().includes('problem') || t.toLowerCase().includes('logic'))
   );
   
   const contentAgents = filteredAgents.filter(a => 
-    a.role === 'creator' || a.tags.some(t => t.includes('content') || t.includes('writing') || t.includes('email'))
+    a.role === 'writing' || a.tags.some(t => t.toLowerCase().includes('content') || t.toLowerCase().includes('writing') || t.toLowerCase().includes('email'))
   );
 
   const handleSelectAgent = (agent: AgentConfig) => {
-    // Navigate to agent detail page
-    router.push(`/agent/${agent.id}`);
-    // Add to recent agents
+    // Navigate to agent detail page using address
+    router.push(`/agent/${agent.address}`);
+    // Add to recent agents using address
     setRecentAgents(prev => {
-      const filtered = prev.filter(id => id !== agent.id);
-      return [agent.id, ...filtered].slice(0, 5);
+      const filtered = prev.filter(addr => addr !== agent.address);
+      return [agent.address, ...filtered].slice(0, 5);
     });
   };
 
@@ -306,11 +307,11 @@ export default function CatalogPage() {
     setIsHireModalOpen(true);
   };
 
-  const togglePinAgent = (agentId: string) => {
+  const togglePinAgent = (agentAddress: string) => {
     setPinnedAgents(prev => 
-      prev.includes(agentId) 
-        ? prev.filter(id => id !== agentId)
-        : [...prev, agentId]
+      prev.includes(agentAddress) 
+        ? prev.filter(addr => addr !== agentAddress)
+        : [...prev, agentAddress]
     );
   };
 
@@ -373,12 +374,12 @@ export default function CatalogPage() {
             </button>
             {pinnedAgents.length > 0 && (
               <div className="ml-4 mt-1 space-y-1">
-                {pinnedAgents.map(id => {
-                  const agent = AGENT_REGISTRY.find(a => a.id === id);
+                {pinnedAgents.map(addr => {
+                  const agent = AGENT_REGISTRY.find(a => a.address === addr);
                   if (!agent) return null;
                   return (
                     <button
-                      key={id}
+                      key={addr}
                       onClick={() => handleSelectAgent(agent)}
                       className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white w-full rounded-lg hover:bg-white/5"
                     >
@@ -400,12 +401,12 @@ export default function CatalogPage() {
             </button>
             {recentAgents.length > 0 && (
               <div className="ml-4 mt-1 space-y-1">
-                {recentAgents.map(id => {
-                  const agent = AGENT_REGISTRY.find(a => a.id === id);
+                {recentAgents.map(addr => {
+                  const agent = AGENT_REGISTRY.find(a => a.address === addr);
                   if (!agent) return null;
                   return (
                     <button
-                      key={id}
+                      key={addr}
                       onClick={() => handleSelectAgent(agent)}
                       className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-white w-full rounded-lg hover:bg-white/5"
                     >

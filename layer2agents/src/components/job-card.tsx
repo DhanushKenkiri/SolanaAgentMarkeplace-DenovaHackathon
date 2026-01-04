@@ -2,14 +2,14 @@
 
 import { Job } from "@/lib/store";
 import { getAgentById } from "@/lib/agents-registry";
-import { Clock, CheckCircle, AlertCircle, Loader2, ExternalLink } from "lucide-react";
+import { Clock, CheckCircle, AlertCircle, Loader2, ExternalLink, LucideIcon } from "lucide-react";
 
 interface JobCardProps {
   job: Job;
   onRefresh: (jobId: string) => void;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; class: string }> = {
+const STATUS_CONFIG: Record<string, { label: string; icon: LucideIcon; class: string }> = {
   pending: { label: "Pending", icon: Clock, class: "status-pending" },
   in_progress: { label: "In Progress", icon: Loader2, class: "status-running" },
   running: { label: "Running", icon: Loader2, class: "status-running" },

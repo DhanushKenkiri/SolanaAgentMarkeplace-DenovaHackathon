@@ -14,9 +14,10 @@ export interface AvailabilityResponse {
 
 export interface InputFieldSchema {
   id: string;
-  type: "string" | "number" | "boolean" | "option" | "none";
+  type: "string" | "number" | "boolean" | "option" | "none" | "text";
   name?: string;
   required?: boolean;
+  optional?: boolean;
   description?: string;
   data?: {
     options?: (string | { value: string; label: string })[];

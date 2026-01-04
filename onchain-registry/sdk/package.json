@@ -5,8 +5,14 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "bin": {
+    "layer2agents-portal": "./dist/portal.js",
+    "layer2agents-cli": "./dist/register-agent-cli.js"
+  },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "build": "tsup src/index.ts src/portal.ts src/register-agent-cli.ts --format cjs,esm --dts",
+    "portal": "npx ts-node src/portal.ts",
+    "cli": "npx ts-node src/register-agent-cli.ts",
     "test": "ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts",
     "lint": "eslint . --ext .ts",
     "clean": "rm -rf dist"
@@ -14,15 +20,21 @@
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
     "@solana/web3.js": "^1.95.0",
-    "@solana/spl-token": "^0.4.6"
+    "@solana/spl-token": "^0.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "open": "^8.4.2"
   },
   "devDependencies": {
     "@types/chai": "^4.3.5",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/mocha": "^10.0.1",
     "@types/node": "^20.4.5",
     "chai": "^4.3.7",
     "mocha": "^10.2.0",
     "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.2",
     "tsup": "^8.0.0",
     "typescript": "^5.1.6"
   },

@@ -56,6 +56,7 @@ function offChainToConfig(agent: OffChainAgent): AgentConfig {
   const role = inferRoleFromTags(agent.tags);
   return {
     id: agent.id,
+    address: agent.owner, // Use owner wallet as the agent address
     name: agent.name,
     description: agent.description,
     role,

@@ -60,7 +60,7 @@ export default function DeployAgentPage() {
     price: "0.05",
     tags: "",
     icon: "🤖",
-    role: "researcher",
+    role: "research",
   });
 
   // Validation state

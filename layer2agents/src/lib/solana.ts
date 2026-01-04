@@ -9,8 +9,9 @@ import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } f
 export const SOLANA_NETWORK = "devnet";
 export const SOLANA_RPC_URL = `https://api.${SOLANA_NETWORK}.solana.com`;
 
-// Treasury wallet for receiving payments (replace with your actual wallet)
-export const TREASURY_WALLET = new PublicKey("11111111111111111111111111111111"); // Placeholder
+// Treasury wallet for receiving payments on Devnet
+// This is a Layer2Agents treasury wallet - replace with your actual wallet for production
+export const TREASURY_WALLET = new PublicKey("8YLKoCu7NwqHNS8GzuvA2ibsvLrsg22YMfMDafxh1B15");
 
 export const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 

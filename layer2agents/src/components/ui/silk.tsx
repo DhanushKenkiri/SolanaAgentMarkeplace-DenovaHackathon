@@ -3,7 +3,7 @@
 /* eslint-disable react/no-unknown-property */
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { forwardRef, useRef, useMemo, useLayoutEffect } from "react";
-import { Color, Mesh } from "three";
+import { Color, Mesh, ShaderMaterial } from "three";
 
 const hexToNormalizedRGB = (hex: string): [number, number, number] => {
   hex = hex.replace("#", "");
@@ -98,7 +98,7 @@ const SilkPlane = forwardRef<Mesh, SilkPlaneProps>(function SilkPlane(
 
   useFrame((_, delta) => {
     if (actualRef.current) {
-      const material = actualRef.current.material as THREE.ShaderMaterial;
+      const material = actualRef.current.material as ShaderMaterial;
       material.uniforms.uTime.value += 0.1 * delta;
     }
   });

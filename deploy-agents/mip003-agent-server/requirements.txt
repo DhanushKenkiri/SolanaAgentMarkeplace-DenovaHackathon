@@ -1,0 +1,34 @@
+# MIP-003 Agent Server Dependencies
+# Core Framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+
+# Swarms Framework - AI Agent Backend
+swarms>=6.0.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# HTTP Client (for tool integrations)
+httpx>=0.26.0
+aiohttp>=3.9.0
+
+# Production Server
+gunicorn>=21.0.0
+
+# Optional: Redis for production job queue
+# redis>=5.0.0
+# celery>=5.3.0
+
+# Optional: Database for persistent job storage
+# sqlalchemy>=2.0.0
+# asyncpg>=0.29.0
+
+# Optional: Monitoring
+# prometheus-client>=0.19.0
+# opentelemetry-api>=1.22.0
+
+# Development only (remove in production)
+# pytest>=7.0.0
+# pytest-asyncio>=0.23.0

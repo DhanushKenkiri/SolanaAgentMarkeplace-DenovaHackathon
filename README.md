@@ -1366,7 +1366,6 @@ limitations under the License.
 |---------|------|
 | **GitHub Issues** | [Report bugs & feature requests](https://github.com/DhanushKenkiri/Project-Layer2Agents/issues) |
 | **GitHub Discussions** | [Community discussions](https://github.com/DhanushKenkiri/Project-Layer2Agents/discussions) |
-| **Twitter/X** | [@Layer2Agents](https://twitter.com/Layer2Agents) |
 
 ---
 

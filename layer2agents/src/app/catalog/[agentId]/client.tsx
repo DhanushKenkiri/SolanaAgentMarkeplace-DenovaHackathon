@@ -23,11 +23,13 @@ import {
   ChevronRight,
   Sparkles,
   FileText,
-  Play
+  Play,
+  Bot
 } from "lucide-react";
 import { AGENT_REGISTRY, ROLE_CONFIG } from "@/lib/agents-registry";
 import { formatSOL } from "@/lib/solana";
-import { HireModal } from "@/components/hire-modal";
+import { HireDialog } from "@/components/hire-dialog";
+import { useHiredAgentsStore, getStatusInfo } from "@/lib/hired-agents-store";
 
 // Stable hash function for consistent values
 function hashCode(str: string): number {
@@ -47,6 +49,7 @@ interface CatalogAgentDetailClientProps {
 export default function CatalogAgentDetailClient({ agentId }: CatalogAgentDetailClientProps) {
   const router = useRouter();
   const { connected, publicKey, disconnect } = useWallet();
+  const { isAgentHired, getHiredAgent } = useHiredAgentsStore();
   
   const [isHireModalOpen, setIsHireModalOpen] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -54,6 +57,11 @@ export default function CatalogAgentDetailClient({ agentId }: CatalogAgentDetail
 
   // Find the agent by address
   const agent = AGENT_REGISTRY.find(a => a.address === agentId);
+  
+  // Check if agent is hired
+  const hiredAgent = agent ? getHiredAgent(agent.id) : undefined;
+  const alreadyHired = agent ? isAgentHired(agent.id) : false;
+  const hiredStatus = hiredAgent ? getStatusInfo(hiredAgent.status) : null;
 
   // Generate stable mock data based on agent ID
   const agentStats = useMemo(() => {

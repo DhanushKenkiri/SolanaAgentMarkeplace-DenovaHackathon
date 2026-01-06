@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, ChevronDown, ChevronUp, Loader2, Settings2, Wallet, CheckCircle, AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, ChevronDown, ChevronUp, Loader2, Settings2, Wallet, CheckCircle, AlertCircle, Bot } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { AgentConfig } from "@/lib/agents-registry";
 import { MIP003Client, InputFieldSchema, StartJobResponse } from "@/lib/mip003-client";
 import { useStore } from "@/lib/store";
+import { useHiredAgentsStore } from "@/lib/hired-agents-store";
 import { formatSOL, generatePurchaseIdentifier, createPaymentTransaction, confirmTransaction } from "@/lib/solana";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -13,11 +15,13 @@ interface HireDialogProps {
   agent: AgentConfig;
   isOpen: boolean;
   onClose: () => void;
+  mockMode?: boolean; // Enable mock flow for demo purposes
 }
 
 type HireStep = "input" | "confirming" | "processing" | "success" | "error";
 
-export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
+export function HireDialog({ agent, isOpen, onClose, mockMode = true }: HireDialogProps) {
+  const router = useRouter();
   const [infoExpanded, setInfoExpanded] = useState(false);
   const [inputExpanded, setInputExpanded] = useState(true);
   const [schema, setSchema] = useState<InputFieldSchema[]>([]);
@@ -27,9 +31,14 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
   const [step, setStep] = useState<HireStep>("input");
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [jobResponse, setJobResponse] = useState<StartJobResponse | null>(null);
+  const [hiredAgentId, setHiredAgentId] = useState<string | null>(null);
 
   const { addJob, walletAddress } = useStore();
+  const { hireAgent, isAgentHired } = useHiredAgentsStore();
   const { publicKey, signTransaction, connected } = useWallet();
+
+  // Check if agent is already hired
+  const alreadyHired = isAgentHired(agent.id);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -38,6 +47,7 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
       setError(null);
       setTxSignature(null);
       setJobResponse(null);
+      setHiredAgentId(null);
       // Always use fixed 3-field schema
       setLoading(true);
       setSchema([
@@ -67,7 +77,60 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
     }
   }, [isOpen]);
 
+  // Mock hire flow - simulates the full flow without actual blockchain transactions
+  const handleMockSubmit = async () => {
+    if (!connected || !publicKey) {
+      setError("Please connect your wallet first");
+      return;
+    }
+
+    if (alreadyHired) {
+      setError("You have already hired this agent");
+      return;
+    }
+
+    setError(null);
+    setStep("confirming");
+
+    try {
+      // Simulate wallet confirmation delay
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      
+      // Generate mock transaction signature
+      const mockSignature = `mock_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      setTxSignature(mockSignature);
+      
+      setStep("processing");
+      
+      // Simulate processing delay
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Add agent to hired agents store (this starts the provisioning flow)
+      const hiredId = hireAgent(agent, publicKey.toBase58(), mockSignature);
+      setHiredAgentId(hiredId);
+
+      // Create mock job response
+      const mockJobResponse: StartJobResponse = {
+        job_id: `job_${Date.now()}`,
+        status: "pending",
+        message: "Your agent is being provisioned. It will be ready in 1-2 minutes.",
+      };
+      setJobResponse(mockJobResponse);
+
+      setStep("success");
+    } catch (err) {
+      console.error("Mock hire error:", err);
+      setError(err instanceof Error ? err.message : "Failed to process hire request");
+      setStep("error");
+    }
+  };
+
   const handleSubmit = async () => {
+    // Use mock flow if enabled
+    if (mockMode) {
+      return handleMockSubmit();
+    }
+
     if (!connected || !publicKey || !signTransaction) {
       setError("Please connect your wallet first");
       return;
@@ -122,6 +185,12 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
+
+      // Also add to hired agents in mock mode
+      if (mockMode) {
+        const hiredId = hireAgent(agent, publicKey.toBase58(), signature);
+        setHiredAgentId(hiredId);
+      }
 
       setStep("success");
     } catch (err) {
@@ -209,7 +278,7 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
                           {formatSOL(agent.priceSOL)}
                         </p>
                         <p className="text-xs text-gray-500 mt-4">
-                          Network: Solana Devnet
+                          {mockMode ? "Demo Mode (No real transaction)" : "Network: Solana Devnet"}
                         </p>
                       </>
                     )}
@@ -219,9 +288,9 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
                         <Loader2 className="w-12 h-12 animate-spin text-indigo-400 mb-4" />
                         <h3 className="text-lg font-semibold text-white mb-2">Processing...</h3>
                         <p className="text-gray-400 text-sm text-center mb-4">
-                          Transaction confirmed! Starting agent task...
+                          {mockMode ? "Payment confirmed! Setting up your agent..." : "Transaction confirmed! Starting agent task..."}
                         </p>
-                        {txSignature && (
+                        {txSignature && !mockMode && (
                           <a 
                             href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
                             target="_blank"
@@ -239,29 +308,63 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
                         <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
                           <CheckCircle className="w-10 h-10 text-emerald-400" />
                         </div>
-                        <h3 className="text-lg font-semibold text-white mb-2">Task Started!</h3>
-                        <p className="text-gray-400 text-sm text-center mb-2">
-                          Job ID: <code className="text-indigo-400">{jobResponse.job_id}</code>
-                        </p>
-                        <p className="text-gray-400 text-sm text-center mb-4">
-                          {jobResponse.message || "Your task is now being processed by the agent."}
-                        </p>
-                        {txSignature && (
-                          <a 
-                            href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-indigo-400 hover:underline mb-4"
-                          >
-                            View payment transaction →
-                          </a>
+                        <h3 className="text-lg font-semibold text-white mb-2">
+                          {mockMode ? "Agent Hired!" : "Task Started!"}
+                        </h3>
+                        {mockMode ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Bot className="w-5 h-5 text-indigo-400" />
+                              <span className="text-white font-medium">{agent.name}</span>
+                            </div>
+                            <p className="text-gray-400 text-sm text-center mb-4">
+                              {jobResponse.message || "Your agent is being provisioned and will be ready in 1-2 minutes."}
+                            </p>
+                            <div className="flex gap-3 mt-4">
+                              <button
+                                onClick={onClose}
+                                className="px-5 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl font-medium text-white transition-colors"
+                              >
+                                Close
+                              </button>
+                              <button
+                                onClick={() => {
+                                  onClose();
+                                  router.push("/my-agents");
+                                }}
+                                className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl font-medium text-white transition-all flex items-center gap-2"
+                              >
+                                <Bot className="w-4 h-4" />
+                                View My Agents
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-gray-400 text-sm text-center mb-2">
+                              Job ID: <code className="text-indigo-400">{jobResponse.job_id}</code>
+                            </p>
+                            <p className="text-gray-400 text-sm text-center mb-4">
+                              {jobResponse.message || "Your task is now being processed by the agent."}
+                            </p>
+                            {txSignature && (
+                              <a 
+                                href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-indigo-400 hover:underline mb-4"
+                              >
+                                View payment transaction →
+                              </a>
+                            )}
+                            <button
+                              onClick={onClose}
+                              className="mt-4 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl font-medium text-white transition-all"
+                            >
+                              View in Inbox
+                            </button>
+                          </>
                         )}
-                        <button
-                          onClick={onClose}
-                          className="mt-4 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 rounded-xl font-medium text-white transition-all"
-                        >
-                          View in Inbox
-                        </button>
                       </>
                     )}
                     
@@ -420,6 +523,16 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
                       </div>
                     )}
 
+                    {/* Already hired notice */}
+                    {alreadyHired && step === "input" && (
+                      <div className="px-6 py-3 bg-emerald-500/10 border-b border-emerald-500/20">
+                        <p className="text-sm text-emerald-400 flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" />
+                          You have already hired this agent
+                        </p>
+                      </div>
+                    )}
+
                     {/* Terms notice */}
                     <div className="px-6 py-4 text-center text-xs text-gray-500">
                       By clicking on &quot;Hire&quot; you&apos;re accepting the{" "}
@@ -444,17 +557,30 @@ export function HireDialog({ agent, isOpen, onClose }: HireDialogProps) {
                   
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-gray-400">
-                      {formatSOL(agent.priceSOL)} (Devnet)
+                      {formatSOL(agent.priceSOL)} {mockMode ? "(Demo)" : "(Devnet)"}
                     </span>
                     
-                    <button
-                      onClick={handleSubmit}
-                      disabled={!isValid || !connected}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-medium text-white transition-all"
-                    >
-                      <Wallet className="w-4 h-4" />
-                      Pay &amp; Hire
-                    </button>
+                    {alreadyHired ? (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          router.push("/my-agents");
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-medium text-white transition-all"
+                      >
+                        <Bot className="w-4 h-4" />
+                        View My Agents
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSubmit}
+                        disabled={!isValid || !connected}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-medium text-white transition-all"
+                      >
+                        <Wallet className="w-4 h-4" />
+                        {mockMode ? "Hire Agent" : "Pay & Hire"}
+                      </button>
+                    )}
                     
                     <button className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
                       <Settings2 className="w-5 h-5 text-gray-400" />

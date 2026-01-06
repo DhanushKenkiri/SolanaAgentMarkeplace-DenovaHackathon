@@ -2,20 +2,32 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Inbox, Store, Zap } from "lucide-react";
+import { Inbox, Store, Zap, Bot } from "lucide-react";
 import { useStore } from "@/lib/store";
+import { useHiredAgentsStore } from "@/lib/hired-agents-store";
 import { WalletButton } from "./wallet-button";
+import { useWallet } from "@solana/wallet-adapter-react";
 
 export function Navbar() {
   const pathname = usePathname();
   const { jobs } = useStore();
+  const { hiredAgents } = useHiredAgentsStore();
+  const { publicKey } = useWallet();
 
   const pendingJobs = jobs.filter(
     (j) => j.status === "pending" || j.status === "in_progress" || j.status === "running"
   ).length;
 
+  // Count provisioning agents for current wallet
+  const provisioningAgents = hiredAgents.filter(
+    (a) => 
+      a.walletAddress === publicKey?.toBase58() && 
+      (a.status === "provisioning" || a.status === "payment_confirmed")
+  ).length;
+
   const navItems = [
     { href: "/catalog", label: "Catalog", icon: Store },
+    { href: "/my-agents", label: "My Agents", icon: Bot, badge: provisioningAgents },
     { href: "/inbox", label: "Inbox", icon: Inbox, badge: pendingJobs },
   ];
 

@@ -845,6 +845,180 @@ vercel deploy
 
 ---
 
+## ⛓️ On-Chain Registry Deployment
+
+The on-chain agent registry is a Solana program built with Anchor framework. This section covers building and deploying the smart contract.
+
+### Prerequisites
+
+| Requirement | Version | Purpose |
+|-------------|---------|---------|
+| Rust | 1.70+ | Solana program development |
+| Solana CLI | 1.18+ | Blockchain interaction |
+| Anchor CLI | 0.30.1 | Anchor framework |
+| Docker (optional) | Latest | Alternative build method |
+
+### Option 1: Build with Docker (Recommended for Windows)
+
+If you have Docker Desktop installed, this is the easiest method:
+
+```powershell
+# Start Docker Desktop first, then:
+cd onchain-registry
+.\build.ps1
+
+# To build AND deploy to devnet:
+.\build.ps1 -Deploy -Cluster devnet
+```
+
+### Option 2: Build with WSL (Windows Subsystem for Linux)
+
+```bash
+# In WSL terminal, install Rust:
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Install Solana CLI
+sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+
+# Install Anchor CLI
+cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
+avm install 0.30.1
+avm use 0.30.1
+
+# Navigate to the registry directory
+cd /mnt/g/Project-Layer2Agents/onchain-registry
+
+# Build the program
+anchor build
+```
+
+### Option 3: Build with Solana Playground (Web-based)
+
+For a zero-install option:
+
+1. Go to [Solana Playground](https://beta.solpg.io/)
+2. Create a new Anchor project
+3. Copy the contents of `onchain-registry/programs/agent-registry/src/lib.rs` into the editor
+4. Update `Cargo.toml` with the required dependencies from our `Cargo.toml`
+5. Click "Build" in the playground
+6. Deploy directly from the playground or download the `.so` file
+
+### Option 4: GitHub Actions (CI/CD)
+
+Push your code to GitHub and use CI/CD for automated builds:
+
+1. The workflow at `.github/workflows/build-solana.yml` will automatically build
+2. Download the compiled `.so` file from the Actions artifacts
+3. Deploy manually using the Solana CLI
+
+### Deploy the Program
+
+Once you have the compiled `agent_registry.so` file:
+
+```bash
+# Configure Solana CLI for devnet
+solana config set --url devnet
+
+# Create a new wallet (if needed)
+solana-keygen new --outfile ~/.config/solana/devnet-wallet.json
+solana config set --keypair ~/.config/solana/devnet-wallet.json
+
+# Airdrop SOL for deployment (devnet only)
+solana airdrop 2
+
+# Check your balance
+solana balance
+
+# Deploy the program
+solana program deploy target/deploy/agent_registry.so
+
+# Note the Program ID from the output!
+```
+
+### Update Program ID After Deployment
+
+After deployment, you'll receive a new Program ID. Update it in these files:
+
+| File | Location |
+|------|----------|
+| `onchain-registry/Anchor.toml` | `[programs.devnet]` section |
+| `onchain-registry/programs/agent-registry/src/lib.rs` | `declare_id!()` macro |
+| `onchain-registry/sdk/src/index.ts` | `AGENT_REGISTRY_PROGRAM_ID` constant |
+| `layer2agents/src/lib/onchain-registry.ts` | `AGENT_REGISTRY_PROGRAM_ID` constant |
+
+Or use the helper script:
+
+```powershell
+cd onchain-registry
+node update-program-id.js <NEW_PROGRAM_ID>
+```
+
+### Initialize the Registry
+
+After deploying, initialize the registry (one-time setup):
+
+```bash
+cd onchain-registry/sdk
+
+# Install SDK dependencies
+npm install
+
+# Initialize the registry
+npx ts-node src/deploy.ts init
+```
+
+### Register Your First Agent
+
+```bash
+# Using the CLI tool
+npx ts-node src/register-agent-cli.ts \
+  --id "my-agent" \
+  --name "My AI Agent" \
+  --description "An AI agent that helps with tasks" \
+  --url "https://my-agent-server.railway.app" \
+  --price 0.05 \
+  --tags "AI,automation"
+
+# Or using the SDK programmatically (see SDK Reference section)
+```
+
+### Verify Deployment
+
+Check that your agent is registered:
+
+```bash
+# List all registered agents
+npx ts-node src/register-agent-cli.ts --list
+
+# Or verify on Solana Explorer
+# Visit: https://explorer.solana.com/address/<PROGRAM_ID>?cluster=devnet
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Account not found" | Ensure registry is initialized first |
+| "Insufficient funds" | Airdrop more SOL: `solana airdrop 2` |
+| "Program deployment failed" | Check you have enough SOL (~3 SOL needed) |
+| "IDL not found" | Run `anchor build` to generate IDL |
+| Build fails on Windows | Use Docker or WSL option |
+
+### Skip On-Chain (Development Mode)
+
+If building is too complex for initial development, the frontend works with static registry mode:
+
+```env
+# In layer2agents/.env.local
+NEXT_PUBLIC_REGISTRY_MODE=static
+```
+
+The on-chain integration is ready - just needs the deployed program ID when available.
+
+---
+
 ## 📁 Project Structure
 
 ```
